@@ -10,16 +10,16 @@ jobs:
 
     steps:
 
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
+      - name: Setup Android
         uses: android-actions/setup-android@v4
         with:
           packages: ''
@@ -30,45 +30,29 @@ jobs:
           sdkmanager "platforms;android-35"
           sdkmanager "build-tools;35.0.0"
 
-      - name: Extract Android Project
+      - name: Extract Project
         run: |
-          echo "Mencari ZIP project..."
+          mkdir project
+          unzip -o SpiderClock_GitHub_Actions.zip -d project
 
-          ZIP_FILE=$(find "$GITHUB_WORKSPACE" -maxdepth 1 -name "*.zip" | head -n 1)
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ZIP project tidak ditemukan!"
-            exit 1
-          fi
-
-          echo "ZIP ditemukan:"
-          echo "$ZIP_FILE"
-
-          mkdir -p "$GITHUB_WORKSPACE/project"
-
-          unzip -o "$ZIP_FILE" -d "$GITHUB_WORKSPACE/project"
-
-          echo "Isi project:"
-          find "$GITHUB_WORKSPACE/project" -maxdepth 4 -type f | head -100
-
-      - name: Find Gradle Project
+      - name: Find Project
         run: |
-          SETTINGS=$(find "$GITHUB_WORKSPACE/project" \
-            -type f \
+          SETTINGS=$(find project -type f \
             \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
             | head -n 1)
 
           if [ -z "$SETTINGS" ]; then
-            echo "settings.gradle tidak ditemukan!"
+            echo "ERROR: settings.gradle tidak ditemukan"
+            find project -maxdepth 5 -type f
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
 
-          echo "Gradle project ditemukan:"
-          echo "$PROJECT_DIR"
-
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+          echo "Project ditemukan:"
+          echo "$PROJECT_DIR"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -78,26 +62,30 @@ jobs:
       - name: Build APK
         run: |
           cd "$PROJECT_DIR"
-
-          echo "Project:"
-          pwd
-
-          echo "Isi:"
-          ls -la
-
-          echo "Build APK..."
           gradle assembleDebug --stacktrace
 
-      - name: Find APK
+      - name: Prepare APK
         run: |
-          echo "Mencari APK..."
+          mkdir -p output
 
-          find "$GITHUB_WORKSPACE/project" \
-            -type f \
-            -name "app-debug.apk"
+          APK=$(find "$PROJECT_DIR" -type f -name "app-debug.apk" | head -n 1)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK tidak ditemukan!"
+            find "$PROJECT_DIR" -type f | tail -100
+            exit 1
+          fi
+
+          echo "APK ditemukan:"
+          echo "$APK"
+
+          cp "$APK" output/SpiderClock.apk
+
+          ls -lh output/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SpiderClock-debug-apk
-          path: '**/app/build/outputs/apk/debug/app-debug.apk'
+          name: SpiderClock-APK
+          path: output/SpiderClock.apk
+          if-no-files-found: error
